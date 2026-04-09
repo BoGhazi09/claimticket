@@ -46,31 +46,31 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   } catch (e) { return; }
 
-  // We use a specific identifier to ensure the loop works
-  const CLAIM_TAG = "-claimedby-";
-
   // ======================
   // CLAIM
   // ======================
   if (commandName === "claimticket") {
     try {
-      // 1. Check if already claimed
-      if (channel.name.includes(CLAIM_TAG)) {
+      // We store the original name in the Topic ONLY to check if it's claimed
+      // This prevents the "already claimed" ghost error
+      if (channel.topic && channel.topic.startsWith("ORIGINAL:")) {
         return interaction.editReply("This ticket is already claimed!");
       }
 
+      const originalName = channel.name;
       const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const newName = `${channel.name}${CLAIM_TAG}${cleanUser}`;
+      
+      // Result: filler-boghazi09-reealms
+      const newName = `${originalName}-${cleanUser}`;
 
-      // We wipe the topic just in case old code left "Already Claimed" text there
-      if (channel.topic) await channel.setTopic(""); 
-
+      // Store original name in topic so we can perfectly restore it later
+      await channel.setTopic(`ORIGINAL:${originalName}`);
       await channel.setName(newName);
+      
       await interaction.editReply(`Ticket claimed by **${user.username}**.`);
-
     } catch (err) {
       console.error(err);
-      await interaction.editReply("Claim failed. (Discord Rate Limit: You can only rename a channel twice every 10 mins).");
+      await interaction.editReply("Claim failed. (Discord Rate Limit: Max 2 renames per 10 mins).");
     }
   }
 
@@ -79,24 +79,21 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "unclaimticket") {
     try {
-      if (!channel.name.includes(CLAIM_TAG)) {
+      // Check if we have a stored original name
+      if (!channel.topic || !channel.topic.startsWith("ORIGINAL:")) {
         return interaction.editReply("This ticket is not currently claimed.");
       }
 
-      // Split at the tag and take the FIRST part (the original name)
-      const parts = channel.name.split(CLAIM_TAG);
-      const originalName = parts[0];
+      // Get the original name back from the topic "Vault"
+      const restoredName = channel.topic.replace("ORIGINAL:", "");
 
-      await channel.setName(originalName);
+      await channel.setName(restoredName);
+      await channel.setTopic(""); // Clear the vault
       
-      // Safety: Clear topic again
-      if (channel.topic) await channel.setTopic(""); 
-
       await interaction.editReply("Ticket unclaimed. You can now claim it again.");
-
     } catch (err) {
       console.error(err);
-      await interaction.editReply("Unclaim failed. (Discord Rate Limit: Wait 10 minutes to rename again).");
+      await interaction.editReply("Unclaim failed. (Note: Discord limits renames to 2 per 10 mins).");
     }
   }
 });
