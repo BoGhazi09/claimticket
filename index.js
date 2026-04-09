@@ -19,11 +19,6 @@ const client = new Client({
 
 const PILOT_ROLE_ID = "1478564123259310090";
 
-const PREFIX = {
-  CLAIMED: "CLAIMED:",
-  ORIGINAL: "ORIGINAL:"
-};
-
 const commands = [
   new SlashCommandBuilder()
     .setName("claimticket")
@@ -55,9 +50,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (!channel) return;
 
-  const isPilot = member.roles.cache.has(PILOT_ROLE_ID);
-
-  if (!isPilot) {
+  if (!member.roles.cache.has(PILOT_ROLE_ID)) {
     return interaction.reply({
       content: "No permission.",
       ephemeral: true
@@ -68,38 +61,26 @@ client.on("interactionCreate", async (interaction) => {
   // CLAIM
   // =========================
   if (interaction.commandName === "claimticket") {
-
-    // 🔥 ALWAYS RESPOND FIRST (prevents "thinking...")
-    await interaction.reply({
-      content: "Processing claim...",
-      ephemeral: true
-    });
+    await interaction.reply({ content: "Claiming...", ephemeral: true });
 
     try {
-      const topic = channel.topic || "";
-
-      if (topic.startsWith(PREFIX.CLAIMED)) {
-        return interaction.editReply("Already claimed.");
-      }
-
       const username = interaction.user.username
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
 
-      const originalName = channel.name;
-      const newName = `${originalName}-${username}`;
+      // if already claimed (simple check)
+      if (channel.name.includes("-claimed-")) {
+        return interaction.editReply("Already claimed.");
+      }
+
+      const newName = `${channel.name}-${username}`;
 
       await channel.setName(newName);
 
-      await channel.setTopic(
-        `${PREFIX.CLAIMED}${interaction.user.id}|${PREFIX.ORIGINAL}${originalName}`
-      );
-
-      return interaction.editReply(`Claimed by ${username}`);
-
+      return interaction.editReply("Claimed.");
     } catch (err) {
-      console.error(err);
-      return interaction.editReply("Claim failed.");
+      console.error("CLAIM ERROR:", err);
+      return interaction.editReply("Claim failed (check permissions).");
     }
   }
 
@@ -107,36 +88,28 @@ client.on("interactionCreate", async (interaction) => {
   // UNCLAIM
   // =========================
   if (interaction.commandName === "unclaimticket") {
-
-    await interaction.reply({
-      content: "Processing unclaim...",
-      ephemeral: true
-    });
+    await interaction.reply({ content: "Unclaiming...", ephemeral: true });
 
     try {
-      const topic = channel.topic || "";
+      let name = channel.name;
 
-      if (!topic.includes(PREFIX.CLAIMED)) {
-        return interaction.editReply("Not claimed.");
+      const parts = name.split("-");
+
+      if (parts.length <= 1) {
+        return interaction.editReply("Nothing to unclaim.");
       }
 
-      const originalPart = topic
-        .split("|")
-        .find(x => x.startsWith(PREFIX.ORIGINAL));
+      // remove last part (claimer)
+      parts.pop();
 
-      if (!originalPart) {
-        return interaction.editReply("Original name missing.");
-      }
+      const newName = parts.join("-");
 
-      const originalName = originalPart.replace(PREFIX.ORIGINAL, "");
-
-      await channel.setName(originalName).catch(() => {});
-      await channel.setTopic("").catch(() => {});
+      await channel.setName(newName);
 
       return interaction.editReply("Unclaimed.");
 
     } catch (err) {
-      console.error(err);
+      console.error("UNCLAIM ERROR:", err);
       return interaction.editReply("Unclaim failed.");
     }
   }
