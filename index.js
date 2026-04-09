@@ -111,41 +111,50 @@ client.on("interactionCreate", async (interaction) => {
   // UNCLAIM
   // ======================
   if (interaction.commandName === "unclaimticket") {
-    try {
-      await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ ephemeral: true });
 
-      const topic = channel.topic || "";
+  try {
+    const channel = interaction.channel;
+    const topic = channel.topic || "";
 
-      if (!topic.includes(CLAIMED_BY)) {
-        return interaction.editReply("This ticket is not claimed.");
-      }
+    // not claimed
+    if (!topic.includes("CLAIMED_BY:")) {
+      return interaction.editReply("This ticket is not claimed.");
+    }
 
-      const originalPart = topic
-        .split("|")
-        .find(p => p.startsWith(ORIGINAL_NAME));
+    // get original name safely
+    const parts = topic.split("|");
+    let originalName = null;
 
-      if (!originalPart) {
-        return interaction.editReply("Original name missing.");
-      }
-
-      const originalName = originalPart.replace(ORIGINAL_NAME, "");
-
-      await channel.setName(originalName);
-      await channel.setTopic("");
-
-      return interaction.editReply("Ticket unclaimed.");
-
-    } catch (err) {
-      console.error("UNCLAIM ERROR:", err);
-
-      if (!interaction.replied) {
-        return interaction.reply({
-          content: "Unclaim failed.",
-          ephemeral: true
-        });
+    for (const p of parts) {
+      if (p.startsWith("ORIGINAL_NAME:")) {
+        originalName = p.replace("ORIGINAL_NAME:", "");
       }
     }
-  }
+
+    if (!originalName) {
+      return interaction.editReply("Missing original name.");
+    }
+
+    // reset channel safely
+    await channel.setName(originalName).catch(() => null);
+    await channel.setTopic("").catch(() => null);
+
+    return interaction.editReply("Ticket unclaimed.");
+
+  } catch (err) {
+    console.error("UNCLAIM CRASH:", err);
+
+    try {
+      return await interaction.editReply("Unclaim failed (error in logs).");
+    } catch {
+      return interaction.reply({
+        content: "Unclaim failed.",
+        ephemeral: true
+       });
+     }
+   }
+ }
 });
 
 client.login(process.env.TOKEN);
