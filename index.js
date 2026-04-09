@@ -17,7 +17,7 @@ const client = new Client({
 });
 
 const PILOT_ROLE_ID = "1478564123259310090";
-const SEP = "-by-"; // The internal separator
+const DIVIDER = "--"; // Hidden divider to handle names with hyphens safely
 
 const commands = [
   new SlashCommandBuilder().setName("claimticket").setDescription("Claim this ticket"),
@@ -52,21 +52,20 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "claimticket") {
     try {
-      // Logic: If the name contains our separator, it's already claimed
-      if (channel.name.includes(SEP)) {
+      if (channel.name.includes(DIVIDER)) {
         return interaction.editReply("This ticket is already claimed!");
       }
 
       const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
       
-      // Result: "ticket-name-by-username"
-      const newName = `${channel.name}${SEP}${cleanUser}`;
+      // format: war-boghazi09--reealms
+      const newName = `${channel.name}${DIVIDER}${cleanUser}`;
 
       await channel.setName(newName);
       await interaction.editReply(`Ticket claimed by **${user.username}**.`);
     } catch (err) {
       console.error("CLAIM ERR:", err);
-      await interaction.editReply("Claim failed. (You might be rate-limited by Discord)");
+      await interaction.editReply("Discord is blocking this rename. Wait 5-10 minutes and try again (Rate Limit).");
     }
   }
 
@@ -75,19 +74,19 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "unclaimticket") {
     try {
-      if (!channel.name.includes(SEP)) {
+      if (!channel.name.includes(DIVIDER)) {
         return interaction.editReply("This ticket is not currently claimed.");
       }
 
-      // Logic: Split at our internal separator and take the first part
-      const parts = channel.name.split(SEP);
+      // Splits at the double hyphen and takes the first part (the original name)
+      const parts = channel.name.split(DIVIDER);
       const originalName = parts[0];
 
       await channel.setName(originalName);
       await interaction.editReply("Ticket unclaimed.");
     } catch (err) {
       console.error("UNCLAIM ERR:", err);
-      await interaction.editReply("Unclaim failed. (You might be rate-limited by Discord)");
+      await interaction.editReply("Unclaim failed. You are likely rate-limited by Discord.");
     }
   }
 });
