@@ -18,6 +18,7 @@ const client = new Client({
 });
 
 const PILOT_ROLE_ID = "1478564123259310090";
+const CLAIM_PREFIX = "CLAIMED:";
 
 const commands = [
   new SlashCommandBuilder()
@@ -64,29 +65,19 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.reply({ content: "Claiming...", ephemeral: true });
 
     try {
+      const topic = channel.topic || "";
+
+      if (topic.startsWith(CLAIM_PREFIX)) {
+        return interaction.editReply("Already claimed.");
+      }
+
       const username = interaction.user.username
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
 
-      const parts = channel.name.split("-");
+      await channel.setName(`${channel.name}-${username}`);
 
-      const last = parts[parts.length - 1];
-
-      // already claimed by someone else
-      const isClaimed = parts.length > 1;
-
-      if (isClaimed && last !== username) {
-        return interaction.editReply("Already claimed.");
-      }
-
-      // already claimed by same user
-      if (last === username) {
-        return interaction.editReply("You already claimed.");
-      }
-
-      const newName = `${channel.name}-${username}`;
-
-      await channel.setName(newName);
+      await channel.setTopic(`${CLAIM_PREFIX}${interaction.user.id}`);
 
       return interaction.editReply("Claimed.");
 
@@ -103,17 +94,19 @@ client.on("interactionCreate", async (interaction) => {
     await interaction.reply({ content: "Unclaiming...", ephemeral: true });
 
     try {
-      let parts = channel.name.split("-");
+      const topic = channel.topic || "";
 
-      if (parts.length <= 1) {
-        return interaction.editReply("Nothing to unclaim.");
+      if (!topic.startsWith(CLAIM_PREFIX)) {
+        return interaction.editReply("Not claimed.");
       }
 
-      parts.pop();
+      const username = topic.replace(CLAIM_PREFIX, "");
 
-      const newName = parts.join("-");
+      let parts = channel.name.split("-");
+      parts.pop(); // remove username safely
 
-      await channel.setName(newName);
+      await channel.setName(parts.join("-"));
+      await channel.setTopic("");
 
       return interaction.editReply("Unclaimed.");
 
