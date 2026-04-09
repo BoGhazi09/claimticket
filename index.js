@@ -1,9 +1,9 @@
 const express = require("express");
 const app = express();
 
-app.get("/", (req, res) => res.send("Bot is running"));
+app.get("/", (req, res) => res.send("Bot running"));
 
-app.listen(3000, () => console.log("Web server running"));
+app.listen(3000, () => console.log("Web server up"));
 
 const {
   Client,
@@ -22,24 +22,28 @@ const PILOT_ROLE_ID = "1478564123259310090";
 const commands = [
   new SlashCommandBuilder()
     .setName("claimticket")
-    .setDescription("Claim ticket"),
+    .setDescription("Claim this ticket"),
 
   new SlashCommandBuilder()
     .setName("unclaimticket")
-    .setDescription("Unclaim ticket")
+    .setDescription("Unclaim this ticket")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
+// register commands
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  await rest.put(
-    Routes.applicationCommands(client.user.id),
-    { body: commands }
-  );
-
-  console.log("Commands ready");
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+    console.log("Commands ready");
+  } catch (e) {
+    console.error("Command register error:", e);
+  }
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -50,6 +54,7 @@ client.on("interactionCreate", async (interaction) => {
 
   if (!channel) return;
 
+  // role check
   if (!member.roles.cache.has(PILOT_ROLE_ID)) {
     return interaction.reply({
       content: "No permission.",
@@ -57,56 +62,65 @@ client.on("interactionCreate", async (interaction) => {
     });
   }
 
-  // =========================
+  // ======================
   // CLAIM
-  // =========================
+  // ======================
   if (interaction.commandName === "claimticket") {
-    await interaction.reply({ content: "Claiming...", ephemeral: true });
-
     try {
+      await interaction.reply({ content: "Claiming...", ephemeral: true });
+
       const username = interaction.user.username
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "");
 
-      // if already claimed (simple check)
-      if (channel.name.includes("-claimed-")) {
-        return interaction.editReply("Already claimed.");
+      const parts = channel.name.split("-");
+
+      const last = parts[parts.length - 1];
+
+      // if already claimed by someone (simple rule)
+      const alreadyClaimed = last && last.length >= 3;
+
+      if (alreadyClaimed && last !== username) {
+        return interaction.editReply("Already claimed by someone else.");
+      }
+
+      // already claimed by same user
+      if (last === username) {
+        return interaction.editReply("You already claimed this ticket.");
       }
 
       const newName = `${channel.name}-${username}`;
 
       await channel.setName(newName);
 
-      return interaction.editReply("Claimed.");
+      return interaction.editReply("Claimed successfully.");
+
     } catch (err) {
       console.error("CLAIM ERROR:", err);
-      return interaction.editReply("Claim failed (check permissions).");
+      return interaction.editReply("Claim failed.");
     }
   }
 
-  // =========================
+  // ======================
   // UNCLAIM
-  // =========================
+  // ======================
   if (interaction.commandName === "unclaimticket") {
-    await interaction.reply({ content: "Unclaiming...", ephemeral: true });
-
     try {
-      let name = channel.name;
+      await interaction.reply({ content: "Unclaiming...", ephemeral: true });
 
-      const parts = name.split("-");
+      let parts = channel.name.split("-");
 
       if (parts.length <= 1) {
         return interaction.editReply("Nothing to unclaim.");
       }
 
-      // remove last part (claimer)
       parts.pop();
 
       const newName = parts.join("-");
 
       await channel.setName(newName);
 
-      return interaction.editReply("Unclaimed.");
+      return interaction.editReply("Unclaimed successfully.");
 
     } catch (err) {
       console.error("UNCLAIM ERROR:", err);
