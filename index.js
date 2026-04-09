@@ -17,8 +17,7 @@ const client = new Client({
 });
 
 const PILOT_ROLE_ID = "1478564123259310090";
-// Shortened prefix to keep channel names under the 100-character limit
-const PREFIX = "clm-"; 
+const SEP = "-by-"; // The internal separator
 
 const commands = [
   new SlashCommandBuilder().setName("claimticket").setDescription("Claim this ticket"),
@@ -53,19 +52,21 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "claimticket") {
     try {
-      if (channel.name.startsWith(PREFIX)) {
+      // Logic: If the name contains our separator, it's already claimed
+      if (channel.name.includes(SEP)) {
         return interaction.editReply("This ticket is already claimed!");
       }
 
-      // Format: clm-username-original-name
       const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
-      const newName = `${PREFIX}${cleanUser}-${channel.name}`;
+      
+      // Result: "ticket-name-by-username"
+      const newName = `${channel.name}${SEP}${cleanUser}`;
 
       await channel.setName(newName);
       await interaction.editReply(`Ticket claimed by **${user.username}**.`);
     } catch (err) {
-      console.error(err);
-      await interaction.editReply("Failed to claim. Check permissions or wait (Rate Limited).");
+      console.error("CLAIM ERR:", err);
+      await interaction.editReply("Claim failed. (You might be rate-limited by Discord)");
     }
   }
 
@@ -74,21 +75,19 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "unclaimticket") {
     try {
-      if (!channel.name.startsWith(PREFIX)) {
+      if (!channel.name.includes(SEP)) {
         return interaction.editReply("This ticket is not currently claimed.");
       }
 
-      // Logic: Find the second hyphen and take everything after it
-      // Format was: clm - username - originalname
-      const parts = channel.name.split("-");
-      // Remove 'clm' and the 'username'
-      const originalName = parts.slice(2).join("-");
+      // Logic: Split at our internal separator and take the first part
+      const parts = channel.name.split(SEP);
+      const originalName = parts[0];
 
-      await channel.setName(originalName || "ticket-restored");
+      await channel.setName(originalName);
       await interaction.editReply("Ticket unclaimed.");
     } catch (err) {
-      console.error(err);
-      await interaction.editReply("Failed to unclaim. Discord limits name changes to 2 per 10 mins.");
+      console.error("UNCLAIM ERR:", err);
+      await interaction.editReply("Unclaim failed. (You might be rate-limited by Discord)");
     }
   }
 });
