@@ -17,7 +17,6 @@ const client = new Client({
 });
 
 const PILOT_ROLE_ID = "1478564123259310090";
-const DIVIDER = "--"; // Hidden divider to handle names with hyphens safely
 
 const commands = [
   new SlashCommandBuilder().setName("claimticket").setDescription("Claim this ticket"),
@@ -52,20 +51,25 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "claimticket") {
     try {
-      if (channel.name.includes(DIVIDER)) {
+      // If the topic contains "ORIGINAL:", it means it's already claimed
+      if (channel.topic && channel.topic.includes("ORIGINAL:")) {
         return interaction.editReply("This ticket is already claimed!");
       }
 
       const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const originalName = channel.name;
       
-      // format: war-boghazi09--reealms
-      const newName = `${channel.name}${DIVIDER}${cleanUser}`;
+      // Exact format: war-boghazi09-reealms
+      const newName = `${originalName}-${cleanUser}`;
 
+      // Save the original name in the topic so we can revert it later
+      await channel.setTopic(`ORIGINAL:${originalName}`);
       await channel.setName(newName);
+      
       await interaction.editReply(`Ticket claimed by **${user.username}**.`);
     } catch (err) {
-      console.error("CLAIM ERR:", err);
-      await interaction.editReply("Discord is blocking this rename. Wait 5-10 minutes and try again (Rate Limit).");
+      console.error(err);
+      await interaction.editReply("Failed to claim. You are likely rate-limited (2 renames per 10 mins).");
     }
   }
 
@@ -74,19 +78,20 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "unclaimticket") {
     try {
-      if (!channel.name.includes(DIVIDER)) {
+      if (!channel.topic || !channel.topic.includes("ORIGINAL:")) {
         return interaction.editReply("This ticket is not currently claimed.");
       }
 
-      // Splits at the double hyphen and takes the first part (the original name)
-      const parts = channel.name.split(DIVIDER);
-      const originalName = parts[0];
+      // Retrieve the original name from the topic
+      const originalName = channel.topic.replace("ORIGINAL:", "");
 
       await channel.setName(originalName);
+      await channel.setTopic(""); // Clear the "memory"
+      
       await interaction.editReply("Ticket unclaimed.");
     } catch (err) {
-      console.error("UNCLAIM ERR:", err);
-      await interaction.editReply("Unclaim failed. You are likely rate-limited by Discord.");
+      console.error(err);
+      await interaction.editReply("Failed to unclaim. Discord limits name changes to 2 per 10 mins.");
     }
   }
 });
