@@ -3,9 +3,7 @@ const app = express();
 
 app.get("/", (req, res) => res.send("Bot is running"));
 
-app.listen(3000, () => {
-  console.log("Web server running");
-});
+app.listen(3000, () => console.log("Web server running"));
 
 const {
   Client,
@@ -41,15 +39,12 @@ const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  try {
-    await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commands }
-    );
-    console.log("Commands registered");
-  } catch (err) {
-    console.error(err);
-  }
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: commands }
+  );
+
+  console.log("Commands ready");
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -73,7 +68,12 @@ client.on("interactionCreate", async (interaction) => {
   // CLAIM
   // =========================
   if (interaction.commandName === "claimticket") {
-    await interaction.deferReply({ ephemeral: true });
+
+    // 🔥 ALWAYS RESPOND FIRST (prevents "thinking...")
+    await interaction.reply({
+      content: "Processing claim...",
+      ephemeral: true
+    });
 
     try {
       const topic = channel.topic || "";
@@ -87,7 +87,6 @@ client.on("interactionCreate", async (interaction) => {
         .replace(/[^a-z0-9]/g, "");
 
       const originalName = channel.name;
-
       const newName = `${originalName}-${username}`;
 
       await channel.setName(newName);
@@ -97,17 +96,22 @@ client.on("interactionCreate", async (interaction) => {
       );
 
       return interaction.editReply(`Claimed by ${username}`);
+
     } catch (err) {
-      console.error("CLAIM ERROR:", err);
+      console.error(err);
       return interaction.editReply("Claim failed.");
     }
   }
 
   // =========================
-  // UNCLAIM (ROBUST)
+  // UNCLAIM
   // =========================
   if (interaction.commandName === "unclaimticket") {
-    await interaction.deferReply({ ephemeral: true });
+
+    await interaction.reply({
+      content: "Processing unclaim...",
+      ephemeral: true
+    });
 
     try {
       const topic = channel.topic || "";
@@ -129,19 +133,11 @@ client.on("interactionCreate", async (interaction) => {
       await channel.setName(originalName).catch(() => {});
       await channel.setTopic("").catch(() => {});
 
-      return interaction.editReply("Unclaimed successfully.");
+      return interaction.editReply("Unclaimed.");
 
     } catch (err) {
-      console.error("UNCLAIM ERROR:", err);
-
-      try {
-        return interaction.editReply("Unclaim failed.");
-      } catch {
-        return interaction.reply({
-          content: "Unclaim failed.",
-          ephemeral: true
-        });
-      }
+      console.error(err);
+      return interaction.editReply("Unclaim failed.");
     }
   }
 });
