@@ -17,6 +17,7 @@ const client = new Client({
 });
 
 const PILOT_ROLE_ID = "1478564123259310090";
+const TAG = "--"; // We use a double hyphen to distinguish from normal channel names
 
 const commands = [
   new SlashCommandBuilder().setName("claimticket").setDescription("Claim this ticket"),
@@ -30,7 +31,7 @@ client.once("clientReady", async () => {
   try {
     await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
     console.log("Commands registered");
-  } catch (err) { console.error("Register Error:", err); }
+  } catch (err) { console.error(err); }
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -42,7 +43,6 @@ client.on("interactionCreate", async (interaction) => {
     return interaction.reply({ content: "No permission.", flags: MessageFlags.Ephemeral });
   }
 
-  // Use defer to stop the "thinking" spinner
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   } catch (e) { return; }
@@ -52,20 +52,21 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "claimticket") {
     try {
-      const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
-      
-      // Safety: If name already ends with -username, don't rename (prevents crash)
-      if (channel.name.endsWith(`-${cleanUser}`)) {
-        return interaction.editReply("You have already claimed this ticket.");
+      // If name contains "--", someone has already claimed it
+      if (channel.name.includes(TAG)) {
+        return interaction.editReply("This ticket is already claimed by someone!");
       }
 
-      const newName = `${channel.name}-${cleanUser}`;
-      await channel.setName(newName);
-      return interaction.editReply(`Ticket claimed: **${newName}**`);
+      const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
+      
+      // Result: war-boghazi09--reealms (Double hyphen makes it safe)
+      const newName = `${channel.name}${TAG}${cleanUser}`;
 
+      await channel.setName(newName);
+      await interaction.editReply(`Ticket claimed by **${user.username}**.`);
     } catch (err) {
-      console.error("CLAIM ERROR:", err);
-      return interaction.editReply("Claim failed. You might be rate-limited (2 renames per 10 mins).");
+      console.error(err);
+      await interaction.editReply("Claim failed. You might be rate-limited (Wait 10 mins).");
     }
   }
 
@@ -74,27 +75,19 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "unclaimticket") {
     try {
-      const nameParts = channel.name.split("-");
-      
-      if (nameParts.length < 2) {
-        return interaction.editReply("This ticket is not claimed.");
+      if (!channel.name.includes(TAG)) {
+        return interaction.editReply("This ticket is not currently claimed.");
       }
 
-      // Pop the last part (the username)
-      nameParts.pop();
-      const restoredName = nameParts.join("-");
+      // Split at the double hyphen and take the first part
+      const parts = channel.name.split(TAG);
+      const originalName = parts[0];
 
-      // Safety: If the name is already the restored name, just finish
-      if (channel.name === restoredName) {
-        return interaction.editReply("Ticket is already unclaimed.");
-      }
-
-      await channel.setName(restoredName);
-      return interaction.editReply(`Ticket unclaimed: **${restoredName}**`);
-
+      await channel.setName(originalName);
+      await interaction.editReply("Ticket unclaimed.");
     } catch (err) {
-      console.error("UNCLAIM ERROR:", err);
-      return interaction.editReply("Unclaim failed. Discord limits renames to 2 per 10 mins.");
+      console.error(err);
+      await interaction.editReply("Unclaim failed. (Note: Discord limits renames to 2 per 10 mins).");
     }
   }
 });
