@@ -6,7 +6,6 @@ const client = new Client({
 
 const CLAIMED_TAG = "CLAIMED_BY:";
 
-// Slash command
 const commands = [
   new SlashCommandBuilder()
     .setName("claimticket")
@@ -45,14 +44,9 @@ client.on("interactionCreate", async (interaction) => {
       return interaction.reply({ content: "Channel not found.", ephemeral: true });
     }
 
-    const topic = channel.topic || "";
-
-    const alreadyClaimed = topic.includes(CLAIMED_TAG);
-
     const isOwner = member.roles.cache.has(ownerRoleId);
     const isPilot = member.roles.cache.has(pilotRoleId);
 
-    // ❌ not allowed role
     if (!isPilot && !isOwner) {
       return interaction.reply({
         content: "You don't have permission to use this command.",
@@ -60,7 +54,9 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
 
-    // ❌ already claimed and NOT owner
+    const topic = channel.topic || "";
+    const alreadyClaimed = topic.includes(CLAIMED_TAG);
+
     if (alreadyClaimed && !isOwner) {
       return interaction.reply({
         content: "This ticket is already claimed.",
@@ -72,11 +68,18 @@ client.on("interactionCreate", async (interaction) => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-    const newName = `${channel.name.split("-")[0]}-${username}`;
+    // 🧠 CLEAN BASE NAME (remove old -username if it exists)
+    let baseName = channel.name;
 
-    // mark as claimed in channel topic
+    // remove last "-something"
+    const parts = baseName.split("-");
+    if (parts.length > 1) {
+      baseName = parts.slice(0, -1).join("-");
+    }
+
+    const newName = `${baseName}-${username}`;
+
     await channel.setTopic(`${CLAIMED_TAG}${interaction.user.id}`);
-
     await channel.setName(newName);
 
     return interaction.reply({
