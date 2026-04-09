@@ -9,21 +9,31 @@ app.listen(3000, () => {
   console.log("Web server running on port 3000");
 });
 
-const { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } = require("discord.js");
+const {
+  Client,
+  GatewayIntentBits,
+  REST,
+  Routes,
+  SlashCommandBuilder
+} = require("discord.js");
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// your pilot role
 const PILOT_ROLE_ID = "1478564123259310090";
+
+const CLAIM_PREFIX = "CLAIMED_BY:";
 
 const commands = [
   new SlashCommandBuilder()
     .setName("claimticket")
-    .setDescription("Claim this ticket")
-    .toJSON()
-];
+    .setDescription("Claim this ticket"),
+
+  new SlashCommandBuilder()
+    .setName("unclaimticket")
+    .setDescription("Unclaim this ticket")
+].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
@@ -35,7 +45,7 @@ client.once("ready", async () => {
       Routes.applicationCommands(client.user.id),
       { body: commands }
     );
-    console.log("Slash command registered");
+    console.log("Slash commands registered");
   } catch (err) {
     console.error(err);
   }
@@ -44,42 +54,87 @@ client.once("ready", async () => {
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
+  const channel = interaction.channel;
+  const member = interaction.member;
+
+  if (!channel) return;
+
+  const isPilot = member.roles.cache.has(PILOT_ROLE_ID);
+
+  if (!isPilot) {
+    return interaction.reply({
+      content: "No permission.",
+      ephemeral: true
+    });
+  }
+
+  // =========================
+  // CLAIM COMMAND
+  // =========================
   if (interaction.commandName === "claimticket") {
 
-    const member = interaction.member;
-    const channel = interaction.channel;
-
-    if (!channel) {
-      return interaction.reply({ content: "No channel found.", ephemeral: true });
-    }
-
-    // 🚫 ROLE CHECK
-    if (!member.roles.cache.has(PILOT_ROLE_ID)) {
-      return interaction.reply({
-        content: "You are not allowed to use this command.",
-        ephemeral: true
-      });
-    }
-
     await interaction.deferReply({ ephemeral: true });
+
+    const topic = channel.topic || "";
+
+    // already claimed
+    if (topic.startsWith(CLAIM_PREFIX)) {
+      return interaction.editReply("This ticket is already claimed.");
+    }
 
     const username = interaction.user.username
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-    // 👉 KEEP FULL ORIGINAL NAME + ADD USER
     const newName = `${channel.name}-${username}`;
 
     try {
-      const updated = await channel.setName(newName);
-
-      console.log("Renamed to:", updated.name);
+      await channel.setName(newName);
+      await channel.setTopic(`${CLAIM_PREFIX}${interaction.user.id}`);
 
       return interaction.editReply(`Claimed by ${username}`);
     } catch (err) {
-      console.error("RENAME ERROR:", err);
+      console.error(err);
+      return interaction.editReply("Rename failed.");
+    }
+  }
 
-      return interaction.editReply("Rename failed (permissions or channel type).");
+  // =========================
+  // UNCLAIM COMMAND
+  // =========================
+  if (interaction.commandName === "unclaimticket") {
+
+    await interaction.deferReply({ ephemeral: true });
+
+    const topic = channel.topic || "";
+
+    if (!topic.startsWith(CLAIM_PREFIX)) {
+      return interaction.editReply("This ticket is not claimed.");
+    }
+
+    const claimedUserId = topic.replace(CLAIM_PREFIX, "");
+
+    // only claimer can unclaim OR owner (optional allow owner override)
+    const isOwner = member.permissions.has("Administrator");
+
+    if (claimedUserId !== interaction.user.id && !isOwner) {
+      return interaction.editReply("Only the claimer can unclaim this ticket.");
+    }
+
+    try {
+      // remove last "-username"
+      let parts = channel.name.split("-");
+      parts.pop();
+
+      const newName = parts.join("-");
+
+      await channel.setName(newName);
+      await channel.setTopic("");
+
+      return interaction.editReply("Ticket unclaimed.");
+    } catch (err) {
+      console.error(err);
+      return interaction.editReply("Unclaim failed.");
     }
   }
 });
