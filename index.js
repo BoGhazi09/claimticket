@@ -15,11 +15,13 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// Slash command
+// your pilot role
+const PILOT_ROLE_ID = "1478564123259310090";
+
 const commands = [
   new SlashCommandBuilder()
     .setName("claimticket")
-    .setDescription("Claim this ticket and rename it")
+    .setDescription("Claim this ticket")
     .toJSON()
 ];
 
@@ -44,39 +46,40 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.commandName === "claimticket") {
 
+    const member = interaction.member;
     const channel = interaction.channel;
 
     if (!channel) {
       return interaction.reply({ content: "No channel found.", ephemeral: true });
     }
 
+    // 🚫 ROLE CHECK
+    if (!member.roles.cache.has(PILOT_ROLE_ID)) {
+      return interaction.reply({
+        content: "You are not allowed to use this command.",
+        ephemeral: true
+      });
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
     const username = interaction.user.username
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-    // 🧠 FIXED: replace only last part of channel name
-    let parts = channel.name.split("-");
-
-    if (parts.length > 1) {
-      parts.pop(); // remove old claimer
-    }
-
-    parts.push(username); // add new claimer
-
-    const newName = parts.join("-");
-
-    await interaction.deferReply({ ephemeral: true });
+    // 👉 KEEP FULL ORIGINAL NAME + ADD USER
+    const newName = `${channel.name}-${username}`;
 
     try {
       const updated = await channel.setName(newName);
 
       console.log("Renamed to:", updated.name);
 
-      return interaction.editReply(`Renamed to ${updated.name}`);
+      return interaction.editReply(`Claimed by ${username}`);
     } catch (err) {
       console.error("RENAME ERROR:", err);
 
-      return interaction.editReply("Rename failed (check permissions or channel type).");
+      return interaction.editReply("Rename failed (permissions or channel type).");
     }
   }
 });
