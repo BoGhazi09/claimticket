@@ -17,7 +17,6 @@ const client = new Client({
 });
 
 const PILOT_ROLE_ID = "1478564123259310090";
-const TAG = "--"; // We use a double hyphen to distinguish from normal channel names
 
 const commands = [
   new SlashCommandBuilder().setName("claimticket").setDescription("Claim this ticket"),
@@ -52,21 +51,23 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "claimticket") {
     try {
-      // If name contains "--", someone has already claimed it
-      if (channel.name.includes(TAG)) {
-        return interaction.editReply("This ticket is already claimed by someone!");
+      // Check if already claimed by looking at the topic
+      if (channel.topic && channel.topic.startsWith("CLAIMED_BY:")) {
+        return interaction.editReply("This ticket is already claimed!");
       }
 
+      const originalName = channel.name;
       const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
-      
-      // Result: war-boghazi09--reealms (Double hyphen makes it safe)
-      const newName = `${channel.name}${TAG}${cleanUser}`;
+      const newName = `${originalName}-${cleanUser}`;
 
+      // Store the original name in the topic so we know exactly what to revert to
+      await channel.setTopic(`CLAIMED_BY:${originalName}`);
       await channel.setName(newName);
+      
       await interaction.editReply(`Ticket claimed by **${user.username}**.`);
     } catch (err) {
       console.error(err);
-      await interaction.editReply("Claim failed. You might be rate-limited (Wait 10 mins).");
+      await interaction.editReply("Claim failed. You are likely rate-limited (Max 2 renames per 10 mins).");
     }
   }
 
@@ -75,15 +76,17 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "unclaimticket") {
     try {
-      if (!channel.name.includes(TAG)) {
+      // If the topic doesn't have our tag, it's not claimed
+      if (!channel.topic || !channel.topic.startsWith("CLAIMED_BY:")) {
         return interaction.editReply("This ticket is not currently claimed.");
       }
 
-      // Split at the double hyphen and take the first part
-      const parts = channel.name.split(TAG);
-      const originalName = parts[0];
+      // Extract the original name we saved earlier
+      const restoredName = channel.topic.replace("CLAIMED_BY:", "");
 
-      await channel.setName(originalName);
+      await channel.setName(restoredName);
+      await channel.setTopic(""); // Clear the topic switch
+      
       await interaction.editReply("Ticket unclaimed.");
     } catch (err) {
       console.error(err);
