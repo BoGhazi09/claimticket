@@ -4,6 +4,8 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
+const CLAIMED_TAG = "CLAIMED_BY:";
+
 // Slash command
 const commands = [
   new SlashCommandBuilder()
@@ -33,22 +35,35 @@ client.on("interactionCreate", async (interaction) => {
 
   if (interaction.commandName === "claimticket") {
 
-    const allowedRoleId = "1478564123259310090";
+    const pilotRoleId = "1478564123259310090";
+    const ownerRoleId = "1478554422303916185";
 
     const member = interaction.member;
+    const channel = interaction.channel;
 
-    if (!member.roles.cache.has(allowedRoleId)) {
+    if (!channel) {
+      return interaction.reply({ content: "Channel not found.", ephemeral: true });
+    }
+
+    const topic = channel.topic || "";
+
+    const alreadyClaimed = topic.includes(CLAIMED_TAG);
+
+    const isOwner = member.roles.cache.has(ownerRoleId);
+    const isPilot = member.roles.cache.has(pilotRoleId);
+
+    // ❌ not allowed role
+    if (!isPilot && !isOwner) {
       return interaction.reply({
         content: "You don't have permission to use this command.",
         ephemeral: true
       });
     }
 
-    const channel = interaction.channel;
-
-    if (!channel) {
+    // ❌ already claimed and NOT owner
+    if (alreadyClaimed && !isOwner) {
       return interaction.reply({
-        content: "Channel not found.",
+        content: "This ticket is already claimed.",
         ephemeral: true
       });
     }
@@ -57,7 +72,10 @@ client.on("interactionCreate", async (interaction) => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-    const newName = `${channel.name}-${username}`;
+    const newName = `${channel.name.split("-")[0]}-${username}`;
+
+    // mark as claimed in channel topic
+    await channel.setTopic(`${CLAIMED_TAG}${interaction.user.id}`);
 
     await channel.setName(newName);
 
