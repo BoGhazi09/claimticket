@@ -3,7 +3,7 @@ const app = express();
 
 app.get("/", (req, res) => res.send("Bot running"));
 
-app.listen(3000, () => console.log("Web server up"));
+app.listen(3000, () => console.log("Web server started"));
 
 const {
   Client,
@@ -22,28 +22,24 @@ const PILOT_ROLE_ID = "1478564123259310090";
 const commands = [
   new SlashCommandBuilder()
     .setName("claimticket")
-    .setDescription("Claim this ticket"),
+    .setDescription("Claim ticket"),
 
   new SlashCommandBuilder()
     .setName("unclaimticket")
-    .setDescription("Unclaim this ticket")
+    .setDescription("Unclaim ticket")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-// register commands
 client.once("ready", async () => {
   console.log(`Logged in as ${client.user.tag}`);
 
-  try {
-    await rest.put(
-      Routes.applicationCommands(client.user.id),
-      { body: commands }
-    );
-    console.log("Commands ready");
-  } catch (e) {
-    console.error("Command register error:", e);
-  }
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: commands }
+  );
+
+  console.log("Commands ready");
 });
 
 client.on("interactionCreate", async (interaction) => {
@@ -54,7 +50,6 @@ client.on("interactionCreate", async (interaction) => {
 
   if (!channel) return;
 
-  // role check
   if (!member.roles.cache.has(PILOT_ROLE_ID)) {
     return interaction.reply({
       content: "No permission.",
@@ -77,23 +72,23 @@ client.on("interactionCreate", async (interaction) => {
 
       const last = parts[parts.length - 1];
 
-      // if already claimed by someone (simple rule)
-      const alreadyClaimed = last && last.length >= 3;
-
-      if (alreadyClaimed && last !== username) {
-        return interaction.editReply("Already claimed by someone else.");
-      }
-
-      // already claimed by same user
+      // if already claimed
       if (last === username) {
         return interaction.editReply("You already claimed this ticket.");
+      }
+
+      // block if someone else claimed (last part is another username)
+      const looksLikeClaim = parts.length > 1;
+
+      if (looksLikeClaim && last !== username) {
+        return interaction.editReply("Already claimed.");
       }
 
       const newName = `${channel.name}-${username}`;
 
       await channel.setName(newName);
 
-      return interaction.editReply("Claimed successfully.");
+      return interaction.editReply("Claimed.");
 
     } catch (err) {
       console.error("CLAIM ERROR:", err);
@@ -108,7 +103,7 @@ client.on("interactionCreate", async (interaction) => {
     try {
       await interaction.reply({ content: "Unclaiming...", ephemeral: true });
 
-      let parts = channel.name.split("-");
+      const parts = channel.name.split("-");
 
       if (parts.length <= 1) {
         return interaction.editReply("Nothing to unclaim.");
@@ -116,11 +111,9 @@ client.on("interactionCreate", async (interaction) => {
 
       parts.pop();
 
-      const newName = parts.join("-");
+      await channel.setName(parts.join("-"));
 
-      await channel.setName(newName);
-
-      return interaction.editReply("Unclaimed successfully.");
+      return interaction.editReply("Unclaimed.");
 
     } catch (err) {
       console.error("UNCLAIM ERROR:", err);
