@@ -23,7 +23,8 @@ const client = new Client({
 
 const PILOT_ROLE_ID = "1478564123259310090";
 
-const CLAIM_PREFIX = "CLAIMED_BY:";
+const CLAIMED_BY = "CLAIMED_BY:";
+const ORIGINAL_NAME = "ORIGINAL_NAME:";
 
 const commands = [
   new SlashCommandBuilder()
@@ -69,7 +70,7 @@ client.on("interactionCreate", async (interaction) => {
   }
 
   // =========================
-  // CLAIM COMMAND
+  // CLAIM
   // =========================
   if (interaction.commandName === "claimticket") {
 
@@ -77,8 +78,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const topic = channel.topic || "";
 
-    // already claimed
-    if (topic.startsWith(CLAIM_PREFIX)) {
+    if (topic.startsWith(CLAIMED_BY)) {
       return interaction.editReply("This ticket is already claimed.");
     }
 
@@ -86,21 +86,27 @@ client.on("interactionCreate", async (interaction) => {
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-    const newName = `${channel.name}-${username}`;
+    // SAVE ORIGINAL NAME ON FIRST CLAIM
+    const originalName = channel.name;
+
+    const newName = `${originalName}-${username}`;
 
     try {
       await channel.setName(newName);
-      await channel.setTopic(`${CLAIM_PREFIX}${interaction.user.id}`);
+
+      await channel.setTopic(
+        `${CLAIMED_BY}${interaction.user.id}|${ORIGINAL_NAME}${originalName}`
+      );
 
       return interaction.editReply(`Claimed by ${username}`);
     } catch (err) {
       console.error(err);
-      return interaction.editReply("Rename failed.");
+      return interaction.editReply("Claim failed.");
     }
   }
 
   // =========================
-  // UNCLAIM COMMAND
+  // UNCLAIM
   // =========================
   if (interaction.commandName === "unclaimticket") {
 
@@ -108,27 +114,22 @@ client.on("interactionCreate", async (interaction) => {
 
     const topic = channel.topic || "";
 
-    if (!topic.startsWith(CLAIM_PREFIX)) {
+    if (!topic.startsWith(CLAIMED_BY)) {
       return interaction.editReply("This ticket is not claimed.");
     }
 
-    const claimedUserId = topic.replace(CLAIM_PREFIX, "");
+    const parts = topic.split("|");
 
-    // only claimer can unclaim OR owner (optional allow owner override)
-    const isOwner = member.permissions.has("Administrator");
+    const originalPart = parts.find(p => p.startsWith(ORIGINAL_NAME));
 
-    if (claimedUserId !== interaction.user.id && !isOwner) {
-      return interaction.editReply("Only the claimer can unclaim this ticket.");
+    if (!originalPart) {
+      return interaction.editReply("Original name not found.");
     }
 
+    const originalName = originalPart.replace(ORIGINAL_NAME, "");
+
     try {
-      // remove last "-username"
-      let parts = channel.name.split("-");
-      parts.pop();
-
-      const newName = parts.join("-");
-
-      await channel.setName(newName);
+      await channel.setName(originalName);
       await channel.setTopic("");
 
       return interaction.editReply("Ticket unclaimed.");
