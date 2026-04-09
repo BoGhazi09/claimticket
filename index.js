@@ -15,8 +15,6 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-const CLAIMED_TAG = "CLAIMED_BY:";
-
 const commands = [
   new SlashCommandBuilder()
     .setName("claimticket")
@@ -51,35 +49,32 @@ client.on("interactionCreate", async (interaction) => {
     const member = interaction.member;
     const channel = interaction.channel;
 
-    if (!channel) {
-      return interaction.reply({ content: "Channel not found.", ephemeral: true });
-    }
+    if (!channel) return;
 
     const isOwner = member.roles.cache.has(ownerRoleId);
     const isPilot = member.roles.cache.has(pilotRoleId);
 
     if (!isPilot && !isOwner) {
       return interaction.reply({
-        content: "You don't have permission to use this command.",
+        content: "No permission.",
         ephemeral: true
       });
     }
 
+    // IMPORTANT FIX (prevents Unknown Interaction)
+    await interaction.deferReply({ ephemeral: true });
+
     const topic = channel.topic || "";
-    const alreadyClaimed = topic.includes(CLAIMED_TAG);
+    const alreadyClaimed = topic.includes("CLAIMED_BY:");
 
     if (alreadyClaimed && !isOwner) {
-      return interaction.reply({
-        content: "This ticket is already claimed.",
-        ephemeral: true
-      });
+      return interaction.editReply("This ticket is already claimed.");
     }
 
     const username = interaction.user.username
       .toLowerCase()
       .replace(/[^a-z0-9]/g, "");
 
-    // clean name (remove last part)
     let baseName = channel.name;
     const parts = baseName.split("-");
     if (parts.length > 1) {
@@ -88,23 +83,15 @@ client.on("interactionCreate", async (interaction) => {
 
     const newName = `${baseName}-${username}`;
 
-    // 🔴 DEBUG RENAME
     try {
-      await channel.setTopic(`${CLAIMED_TAG}${interaction.user.id}`);
+      await channel.setTopic(`CLAIMED_BY:${interaction.user.id}`);
       await channel.setName(newName);
     } catch (err) {
-      console.error("RENAME ERROR:", err);
-
-      return interaction.reply({
-        content: "Failed to rename channel. Check Render logs.",
-        ephemeral: true
-      });
+      console.error(err);
+      return interaction.editReply("Rename failed. Check bot permissions.");
     }
 
-    return interaction.reply({
-      content: `Ticket claimed by ${interaction.user.username}`,
-      ephemeral: true
-    });
+    return interaction.editReply(`Ticket claimed by ${interaction.user.username}`);
   }
 });
 
