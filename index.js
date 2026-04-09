@@ -17,6 +17,9 @@ const client = new Client({
 });
 
 const PILOT_ROLE_ID = "1478564123259310090";
+// This is a special divider. It looks like a normal hyphen to users, 
+// but it's actually a slightly different character to keep the bot from getting confused.
+const DIVIDER = "—"; 
 
 const commands = [
   new SlashCommandBuilder().setName("claimticket").setDescription("Claim this ticket"),
@@ -51,31 +54,22 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "claimticket") {
     try {
+      // If the name contains our special divider, it's already claimed
+      if (channel.name.includes(DIVIDER)) {
+        return interaction.editReply("This ticket is already claimed!");
+      }
+
       const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
       
-      // If the channel name already ends with ANY username-like string after a hyphen, 
-      // but we want to be safe, we check if it already contains the user's name.
-      if (channel.name.endsWith(`-${cleanUser}`)) {
-        return interaction.editReply("You have already claimed this ticket!");
-      }
+      // Result looks like: war-boghazi09—reealms
+      // (The divider looks like a hyphen in Discord)
+      const newName = `${channel.name}${DIVIDER}${cleanUser}`;
 
-      // To prevent claiming twice, we check if the channel has a topic "CLAIMED"
-      // I've added a fallback so it doesn't get stuck.
-      if (channel.topic === "CLAIMED") {
-        return interaction.editReply("This ticket is already claimed by someone else!");
-      }
-
-      const originalName = channel.name;
-      const newName = `${originalName}-${cleanUser}`;
-
-      // Set topic to "CLAIMED" to act as a simple toggle
-      await channel.setTopic("CLAIMED");
       await channel.setName(newName);
-      
       await interaction.editReply(`Ticket claimed by **${user.username}**.`);
     } catch (err) {
       console.error(err);
-      await interaction.editReply("Claim failed. (Discord Rate Limit: Max 2 renames per 10 mins)");
+      await interaction.editReply("Claim failed. Discord limits renames to 2 per 10 mins. Try again in a bit.");
     }
   }
 
@@ -84,28 +78,19 @@ client.on("interactionCreate", async (interaction) => {
   // ======================
   if (commandName === "unclaimticket") {
     try {
-      if (channel.topic !== "CLAIMED") {
+      if (!channel.name.includes(DIVIDER)) {
         return interaction.editReply("This ticket is not currently claimed.");
       }
 
-      const nameParts = channel.name.split("-");
-      if (nameParts.length < 2) {
-        // If there's no hyphen, we just clear the topic
-        await channel.setTopic("");
-        return interaction.editReply("Ticket status reset.");
-      }
+      // Split at the special divider
+      const parts = channel.name.split(DIVIDER);
+      const originalName = parts[0];
 
-      // Remove the last part (the username)
-      nameParts.pop();
-      const restoredName = nameParts.join("-");
-
-      await channel.setName(restoredName);
-      await channel.setTopic(""); // Clear the claimed status
-      
+      await channel.setName(originalName);
       await interaction.editReply("Ticket unclaimed.");
     } catch (err) {
       console.error(err);
-      await interaction.editReply("Unclaim failed. (Wait 10 mins for Discord rate limits!)");
+      await interaction.editReply("Unclaim failed. You might be rate-limited by Discord.");
     }
   }
 });
