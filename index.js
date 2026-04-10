@@ -43,22 +43,35 @@ client.on("interactionCreate", async (interaction) => {
   // Defer immediately to prevent "Interaction Failed"
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+  // Helper function to clean username
+  const cleanUsername = (username) => {
+    return username.toLowerCase().replace(/[^a-z0-9]/g, "");
+  };
+
   // ======================
   // CLAIM
   // ======================
   if (commandName === "claimticket") {
     try {
-      const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
+      const cleanUser = cleanUsername(user.username);
       
-      // If the name already ends with this user, don't do it again
-      if (channel.name.endsWith("-" + cleanUser)) {
+      // Check if already claimed by anyone
+      const claimedPattern = new RegExp(`-${cleanUser}$`);
+      if (channel.name.match(claimedPattern)) {
         return interaction.editReply("You already claimed this!");
+      }
+
+      // Check if claimed by someone else
+      const hasClaimSuffix = /-[a-z0-9]+$/;
+      if (hasClaimSuffix.test(channel.name)) {
+        return interaction.editReply("This ticket is already claimed by someone else!");
       }
 
       const newName = `${channel.name}-${cleanUser}`;
       await channel.setName(newName);
       await interaction.editReply(`Claimed: ${newName}`);
     } catch (err) {
+      console.error(err);
       await interaction.editReply("Claim failed. You are likely rate-limited (2 per 10 mins).");
     }
   }
@@ -69,19 +82,30 @@ client.on("interactionCreate", async (interaction) => {
   if (commandName === "unclaimticket") {
     try {
       const currentName = channel.name;
-      const lastHyphenIndex = currentName.lastIndexOf("-");
-
-      // If there is no hyphen, it's already unclaimed
-      if (lastHyphenIndex === -1) {
+      const cleanUser = cleanUsername(user.username);
+      
+      // Check if the ticket is claimed at all
+      const hasClaimSuffix = /-[a-z0-9]+$/;
+      if (!hasClaimSuffix.test(currentName)) {
         return interaction.editReply("This ticket is not claimed.");
       }
-
-      // Cut the name at the very last hyphen found
+      
+      // Extract the claimed username from the channel name
+      const lastHyphenIndex = currentName.lastIndexOf("-");
+      const claimedUser = currentName.substring(lastHyphenIndex + 1);
+      
+      // Check if the user trying to unclaim is the one who claimed it
+      if (claimedUser !== cleanUser) {
+        return interaction.editReply("You can only unclaim tickets that you claimed!");
+      }
+      
+      // Remove the claim suffix
       const restoredName = currentName.substring(0, lastHyphenIndex);
-
+      
       await channel.setName(restoredName);
       await interaction.editReply(`Unclaimed: ${restoredName}`);
     } catch (err) {
+      console.error(err);
       await interaction.editReply("Unclaim failed. Discord limit reached. Wait 10 mins.");
     }
   }
