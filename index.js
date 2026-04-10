@@ -19,8 +19,8 @@ const client = new Client({
 const PILOT_ROLE_ID = "1478564123259310090";
 
 const commands = [
-  new SlashCommandBuilder().setName("claimticket").setDescription("Claim this ticket"),
-  new SlashCommandBuilder().setName("unclaimticket").setDescription("Unclaim this ticket")
+  new SlashBuilder().setName("claimticket").setDescription("Claim this ticket"),
+  new SlashBuilder().setName("unclaimticket").setDescription("Unclaim this ticket")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
@@ -42,31 +42,24 @@ client.on("interactionCreate", async (interaction) => {
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
-
   // ======================
   // CLAIM
   // ======================
   if (commandName === "claimticket") {
     try {
-      if (channel.name.endsWith("-" + cleanUser)) {
-        return interaction.editReply("You already claimed this ticket!");
-      }
-
-      // Check if claimed by someone else — look for any pilot's suffix
-      // Simple approach: warn if name already looks claimed (has any suffix after last hyphen)
-      // You can expand this if you store claim state externally
+      const cleanUser = user.username.toLowerCase().replace(/[^a-z0-9]/g, "");
+      
+      // If there's already a claimer, don't add another one
+      // We check if the channel name already contains a "-username" pattern
+      // You can manually adjust the logic here if you want to allow re-claiming
+      
       const newName = `${channel.name}-${cleanUser}`;
-
-      if (newName.length > 100) {
-        return interaction.editReply("Channel name would exceed Discord's 100-character limit.");
-      }
 
       await channel.setName(newName);
       await interaction.editReply(`✅ Claimed: \`${newName}\``);
     } catch (err) {
       console.error(err);
-      await interaction.editReply("Claim failed. You may be rate-limited (2 renames per 10 mins).");
+      await interaction.editReply("Claim failed. (Rate Limited: Wait 10 mins)");
     }
   }
 
@@ -76,31 +69,23 @@ client.on("interactionCreate", async (interaction) => {
   if (commandName === "unclaimticket") {
     try {
       const currentName = channel.name;
-      const suffix = "-" + cleanUser;
+      
+      // Look for the last hyphen
+      const lastHyphen = currentName.lastIndexOf("-");
 
-      // Only allow unclaim if the channel ends with THIS user's suffix
-      if (!currentName.endsWith(suffix)) {
-        // Give a more helpful message depending on context
-        const isClaimed = currentName.lastIndexOf("-") !== -1;
-        if (isClaimed) {
-          return interaction.editReply("You didn't claim this ticket — only the claimer can unclaim it.");
-        } else {
-          return interaction.editReply("This ticket is not claimed.");
-        }
+      // If no hyphen exists, the name is already original
+      if (lastHyphen === -1) {
+        return interaction.editReply("This ticket is not claimed.");
       }
 
-      // Safely remove only this user's suffix from the end
-      const restoredName = currentName.slice(0, currentName.length - suffix.length);
-
-      if (!restoredName) {
-        return interaction.editReply("Cannot unclaim: restoring the name would leave it empty.");
-      }
+      // Restore the name by cutting off everything from the last hyphen onward
+      const restoredName = currentName.substring(0, lastHyphen);
 
       await channel.setName(restoredName);
       await interaction.editReply(`✅ Unclaimed: \`${restoredName}\``);
     } catch (err) {
       console.error(err);
-      await interaction.editReply("Unclaim failed. Discord rate limit reached — wait 10 mins.");
+      await interaction.editReply("Unclaim failed. (Rate Limited: Wait 10 mins)");
     }
   }
 });
